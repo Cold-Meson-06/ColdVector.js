@@ -1,9 +1,32 @@
 const ColdVector = (function () {
-    let ids = 0;
+
+    let lett = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+    function setAttributes(objA, objB) {
+        for (let i in objB) {
+            objA[i] = objB[i];
+        };
+    };
+
+    function newUUID() {
+        return new Array(4).fill(0).map((element) => {
+            return lett[Number.parseInt(Math.random() * 26)] + ((new Date().getMilliseconds() + Math.random() * 1000).toFixed(0));
+        }).join('-');
+    };
+
+    function isEqualToAny(x, arr) {
+        let result = false;
+        arr.map(i => x === i && !result && (result = true));
+        return result;
+    };
+
+    const validTransforms = ['positionx', 'positiony', 'anchorx', 'anchory', 'pivotx', 'pivoty', 'rotation', 'skewx', 'skewy', 'scalex', 'scaley'];
     const ns = 'http://www.w3.org/2000/svg';
+    
     class SVGCanvas {
         constructor(x, y) {
             const self = this;
+            this.context = this
             this.element = document.createElementNS(ns, 'svg');
             this.definitions = document.createElementNS(ns, 'defs');
             this.element.appendChild(this.definitions);
@@ -14,6 +37,10 @@ const ColdVector = (function () {
         };
         addChild(child) {
             this.element.appendChild(child.element || child);
+            if (child.element) {
+                child.context = this;
+                child.parent = this;
+            };
             return this;
         };
         resize(x, y) {
@@ -21,14 +48,87 @@ const ColdVector = (function () {
             this.element.setAttributeNS(null, 'height', y);
             return this;
         };
-        addDefinition(def, id) {
+        addDefinition(def) {
             this.definitions.appendChild(def.element || def);
-            (def.element || def).setAttributeNS(null, 'id', id);
             return this;
-        }
+        };
         removeDefinition(def) {
             this.definitions.removeChild(def.element || def);
             return this;
+        };
+        path(p, att) {
+            let svgE = new Path(p, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        circle(r, att) {
+            let svgE = new Circle(r, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        ellipse(rx, ry, att) {
+            let svgE = new Ellipse(rx, ry, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        rectangle(w, h, att) {
+            let svgE = new Rect(w, h, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        polygon(p, att) {
+            let svgE = new Polygon(p, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        //Others:
+        image(src, att) {
+            let svgE = new Image(src, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        symbol(svg, att) {
+            let svgE = new Symbol(svg, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        clipPath(id, mask, att) {
+            let svgE = new ClipPath(id, mask, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        }
+        group(el, att) {
+            let svgE = new Group(el, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        //Lines:
+        line(x1, y1, x2, y2, w, att) {
+            let svgE = new Line(x1, y1, x2, y2, w, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        polyline(p, att) {
+            let svgE = new Polyline(p, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        //Text:
+        text(str, att) {
+            let svgE = new Text(str, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        textPath(srt, path, att) {
+            let svgE = new TextPath(srt, path, att).setParent(this);
+            svgE.context = this;
+            return svgE;
+        };
+        //Constructors
+        fromSymbol(id, att) {
+            let svgE = new Use(id, att).setParent(this);
+            svgE.context = this;
+            return svgE;
         };
     };
     const getSVGCanvas = {
@@ -52,30 +152,14 @@ const ColdVector = (function () {
             return ctx;
         }
     }
-    class MatrixBase {
+    class BasicElement {
         constructor(shape, attribs) {
             const self = this;
             this.element = document.createElementNS(ns, shape);
-            this.element.setAttributeNS(null, 'transform', "matrix(1 0 0 1 0 0 ) translate(0 0) translate(0 0) rotate(0 0 0) skewX(0) skewY(0)  scale(1 1)");
-            this._transform = {
-                positionX: 0,
-                positionY: 0,
-                anchorX: 0,
-                anchorY: 0,
-                pivotX: 0,
-                pivotY: 0,
-                rotation: 0,
-                skewX: 0,
-                skewY: 0,
-                scaleX: 1,
-                scaleY: 1,
-                _anchorX: 0,
-                _anchorY: 0
-            };
-            this.transform = new Proxy(this._transform, {
-                get: (t, name) => { return self._transform[name] },
-                set: (t, name, value) => { transforms[name](self, value) }
-            });
+            this.parent = null;
+            this.context = null;
+            this.isDef = false;
+            this.element.id = newUUID();
             this.attributes = new Proxy({}, {
                 get: (target, name) => { return self.element.getAttributeNS(null, name) },
                 set: (target, name, value) => { return self.element.setAttributeNS(null, name, value) }
@@ -84,25 +168,210 @@ const ColdVector = (function () {
         };
         setParent(svgE) {
             (svgE.element || svgE).appendChild(this.element);
+            this.parent = svgE;
+            this.context = svgE.context;
             return this;
         };
-        addChild(svgE) {
-            this.element.appendChild(svgE.element || svgE);
+        isDefinition(bool) {
+            this.isDef = bool;
+            if (bool) {
+                this.context.definitions.appendChild(this.element);
+            } else {
+                this.context.element.appendChild(this.element);
+            };
             return this;
         };
-        removeChild(svgE) {
-            this.element.removeChild(svgE.element);
+    };
+    class MatrixBase extends BasicElement {
+        constructor(shape, attribs) {
+            super(shape, attribs);
+            const self = this;
+            this.element.setAttributeNS(null, 'transform', "matrix(1 0 0 1 0 0 ) translate(0 0) translate(0 0) rotate(0 0 0) skewX(0) skewY(0)  scale(1 1)");
+            this._transform = {
+                positionx: 0,
+                positiony: 0,
+                anchorx: 0,
+                anchory: 0,
+                pivotx: 0,
+                pivoty: 0,
+                rotation: 0,
+                skewx: 0,
+                skewy: 0,
+                scalex: 1,
+                scaley: 1,
+                _anchorx: 0,
+                _anchory: 0
+            };
+            this.transform = new Proxy(this._transform, {
+                get: (t, name) => { return self._transform[name] },
+                set: (t, name, value) => { if (isEqualToAny(name, validTransforms)) { return transforms[name](self, value) } else { return self._transform[name] = value } }
+            });
+            this.rotation = 0;
+            this.position = {
+                x: 0, y: 0,
+                set(x, y) {
+                    this.x = x, this.y = y
+                    return self
+                }
+            };
+            this.anchor = {
+                x: 0, y: 0,
+                set(x, y) {
+                    this.x = x, this.y = y
+                    return self
+                }
+            };
+            this.pivot = {
+                x: 0, y: 0,
+                set(x, y) {
+                    this.x = x, this.y = y
+                    return self
+                }
+            };
+            this.skew = {
+                x: 0, y: 0,
+                set(x, y) {
+                    this.x = x, this.y = y
+                    return self
+                }
+            };
+            this.scale = {
+                x: 0, y: 0,
+                set(x, y) {
+                    this.x = x, this.y = y
+                    return self
+                }
+            };
+            Object.defineProperty(this, 'rotation', {
+                get() { return self.transform.rotation },
+                set(x) { return self.transform.rotation = x }
+            });
+            Object.defineProperties(self.position, {
+                'x': {
+                    get() { return self.transform.positionx },
+                    set(v) { return self.transform.positionx = v }
+                },
+                'y': {
+                    get() { return self.transform.positiony },
+                    set(v) { return self.transform.positiony = v }
+                }
+            });
+            Object.defineProperties(self.anchor, {
+                'x': {
+                    get() { return self.transform.anchorx },
+                    set(v) { return self.transform.anchorx = v }
+                },
+                'y': {
+                    get() { return self.transform.anchory },
+                    set(v) { return self.transform.anchory = v }
+                }
+            });
+            Object.defineProperties(self.pivot, {
+                'x': {
+                    get() { return self.transform.pivotx },
+                    set(v) { return self.transform.pivotx = v }
+                },
+                'y': {
+                    get() { return self.transform.pivoty },
+                    set(v) { return self.transform.pivoty = v }
+                }
+            });
+            Object.defineProperties(self.skew, {
+                'x': {
+                    get() { return self.transform.skewx },
+                    set(v) { return self.transform.skewx = v }
+                },
+                'y': {
+                    get() { return self.transform.skewy },
+                    set(v) { return self.transform.skewy = v }
+                }
+            });
+            Object.defineProperties(self.scale, {
+                'x': {
+                    get() { return self.transform.scalex },
+                    set(v) { return self.transform.scalex = v }
+                },
+                'y': {
+                    get() { return self.transform.scaley },
+                    set(v) { return self.transform.scaley = v }
+                }
+            })
+        };
+        setRotation(v) {
+            this.rotation = v;
             return this;
         };
-        setClipPath(url) {
-            this.element.setAttributeNS(null, 'clip-path', 'url(#' + (typeof url === 'string' ? url : url.element.id) + ')');
+        setRadRotation(v) {
+            this.rotation = v * (180 / Math.PI);
             return this;
         };
-        changeToDefinition(svgE, id) {
-            this.element.id = id || ids++
-            svgE.definitions.appendChild(this.element);
-            return this;
-        };
+    };
+    const transforms = {
+        positionx(self, value) {
+            self._transform.positionx = value;
+            self.element.transform.baseVal.getItem(1).setTranslate(value, self._transform.positiony);
+            return value;
+        },
+        positiony(self, value) {
+            self._transform.positiony = value;
+            self.element.transform.baseVal.getItem(1).setTranslate(self._transform.positionx, value);
+            return value;
+        },
+        anchorx(self, value) {
+            self._transform.anchorx = value;
+            self._transform._anchorx = -(value * self.element.getBBox().width * self._transform.scalex) + self._transform.pivotx;
+            self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorx, self._transform._anchory);
+            return value;
+        },
+        anchory(self, value) {
+            self._transform.anchory = value;
+            self._transform._anchory = -(value * self.element.getBBox().height * self._transform.scaley) + self._transform.pivoty;
+            self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorx, self._transform._anchory);
+            return value;
+        },
+        rotation(self, value) {
+            self._transform.rotation = value;
+            self.element.transform.baseVal.getItem(3).setRotate(value, self._transform.pivotx, self._transform.pivoty);
+            return value;
+        },
+        pivotx(self, value) {
+            self._transform.pivotx = value;
+            self.element.transform.baseVal.getItem(3).setRotate(self._transform.rotation, self._transform.pivotX, value);
+            this.updateAnchor(self);
+            return value;
+        },
+        pivoty(self, value) {
+            self._transform.pivoty = value;
+            self.element.transform.baseVal.getItem(3).setRotate(self._transform.rotation, value, self._transform.pivoty);
+            this.updateAnchor(self);
+            return value;
+        },
+        skewx(self, value) {
+            self._transform.skewx = value;
+            self.element.transform.baseVal.getItem(4).setSkewX(value);
+            return value;
+        },
+        skewy(self, value) {
+            self._transform.skewy = value;
+            self.element.transform.baseVal.getItem(5).setSkewY(value);
+            return value;
+        },
+        scalex(self, value) {
+            self._transform.scalex = value;
+            self.element.transform.baseVal.getItem(6).setScale(value, self._transform.scaley);
+            this.updateAnchor(self);
+            return value;
+        },
+        scaley(self, value) {
+            self._transform.scaley = value;
+            self.element.transform.baseVal.getItem(6).setScale(self._transform.scalex, value);
+            this.updateAnchor(self);
+            return value;
+        },
+        updateAnchor(self) {
+            self.transform.anchorx = self.transform.anchorx;
+            self.transform.anchory = self.transform.anchory;
+        }
     };
     class Group extends MatrixBase {
         constructor(svgs, att = {}) {
@@ -115,32 +384,75 @@ const ColdVector = (function () {
                 };
             };
         };
+        addChild(svgE) {
+            this.element.appendChild(svgE.element || svgE);
+            if (svgE.element) {
+                svgE.parent = this;
+                svgE.context = this.context;
+            };
+        };
     };
     class TextPath extends MatrixBase {
         constructor(str, path, att = {}) {
             super('text', att);
+            const self = this;
             this.textPath = document.createElementNS(ns, 'textPath');
             this.textPath.textContent = str;
+            this.text = str;
+            this.path = path;
+            this._path = path;
             this.element.appendChild(this.textPath);
             if (typeof path === 'string') {
                 this.textPath.setAttributeNS(null, 'href', '#' + path);
+                this._path = document.getElementById(path);
             } else {
                 this.textPath.setAttributeNS(null, 'href', '#' + path.element.id);
-            }
+                this._path = path;
+            };
+            Object.defineProperties(this, {
+                'text': {
+                    get() {
+                        return self.textPath.textContent;
+                    },
+                    set(v) {
+                        return self.textPath.textContent = v;
+                    }
+                },
+                'path': {
+                    get() {
+                        return self._path;
+                    },
+                    set(path) {
+                        if (typeof path === 'string') {
+                            self.textPath.setAttributeNS(null, 'href', '#' + path);
+                            self._path = document.getElementById(path);
+                        } else {
+                            self.textPath.setAttributeNS(null, 'href', '#' + path.element.id);
+                            self._path = path;
+                        };
+                    }
+                }
+            });
         };
     };
     class Text extends MatrixBase {
         constructor(str, att = {}) {
             super('text', att);
+            const self = this;
             this.element.textContent = str;
+            this.text = str;
+            Object.defineProperty(this, 'text', {
+                get() { return self.element.textContent },
+                set(v) { return self.element.textContent = v }
+            });
         };
     };
     class Use extends MatrixBase {
         constructor(url, att = {}) {
-            super('use', att)
+            super('use', att);
             this.element.setAttributeNS(null, 'href', '#' + (typeof url === 'string' ? url : url.element.id));
-        }
-    }
+        };
+    };
     class Symbol extends MatrixBase {
         constructor(first, att = {}) {
             super('symbol', att);
@@ -151,27 +463,39 @@ const ColdVector = (function () {
                     this.element.appendChild(first.element || first);
                 };
             };
+            this.context && this.context.definitions.appendChild(this.element);
+            this.isDefinition = undefined;
         };
-        addElement(svgB) {
-            this.element.appendChild(svgB.element || svgB);
-            return this
+        setParent(svgE) {
+            this.parent = svgE;
+            this.context = svgE.context;
+            this.context.definitions.appendChild(this.element);
+            return this;
+        };
+        addElement(svgE) {
+            this.element.appendChild(svgE.element || svgE);
+            if (svgE.element) {
+                svgE.parent = this;
+                svgE.context = this.context;
+            };
+            return this;
         };
         addElements(svgS) {
-            svgS.map(item => this.element.appendChild(item.element || item));
+            svgS.map(item => {
+                this.element.appendChild(item.element || item);
+                if (item.element) {
+                    item.parent = this;
+                    item.context = this.context;
+                };
+            });
             return this;
         };
-        removeElement(svgB) {
-            this.element.removeChild(svgB.element || svgB);
-            return this;
-        };
-        changeToDefinition(svgC, id) {
-            this.element.id = id;
-            svgC.definitions.appendChild(this.element);
+        removeElement(svgE) {
+            this.element.removeChild(svgE.element || svgE);
             return this;
         };
         use() {
-            let result = document.createElementNS(ns, 'use');
-            return new Use(this.element.id);
+            return new Use(this.element.id).setParent(this.parent);
         };
     };
     class Polyline extends MatrixBase {
@@ -182,7 +506,7 @@ const ColdVector = (function () {
         };
     };
     class Polygon extends MatrixBase {
-        constructor(points = '0,0 10,10 0,10',att={}) {
+        constructor(points = '0,0 10,10 0,10', att = {}) {
             super('polygon', Object.assign({
                 'points': points
             }, att));
@@ -247,18 +571,21 @@ const ColdVector = (function () {
                     this.element.appendChild(mask.element);
                 };
             };
+            this.context && this.context.definitions.appendChild(this.element);
+            this.isDefinition = undefined;
         };
-        clipElement(svg) {
-            if (this.element.id) {
-                (svg.element || svg).setAttributeNS(null, 'clip-path', 'url(#' + this.element.id + ')');
-                return this;
-            } else {
-                console.error('The element ' + this + ' has no an id, please use changeToDefinition first');
-                return false;
-            };
+        setParent(svgE) {
+            this.parent = svgE;
+            this.context = svgE.context;
+            this.context.definitions.appendChild(this.element);
+            return this;
         };
-        addClipElement(svgB) {
-            this.element.appendChild(svgB.shape || svgB);
+        clipElement(svgE) {
+            (svgE.element || svgE).setAttributeNS(null, 'clip-path', 'url(#' + this.element.id + ')');
+            return this;
+        };
+        addClipElement(svgE) {
+            this.element.appendChild(svgB.element || svgE);
             return this;
         };
         addClipElements(svgs) {
@@ -268,94 +595,30 @@ const ColdVector = (function () {
             this.element.removeChild(svgB.shape || svgB);
             return this;
         };
-        changeToDefinition(svgC, id) {
-            this.element.id = id;
-            svgC.definitions.appendChild(this.element);
-            return this;
-        };
-    };
-    const setAttributes = function (objA, objB) {
-        for (let i in objB) {
-            objA[i] = objB[i];
-        };
-    };
-    const transforms = {
-        positionX(self, value) {
-            self._transform.positionX = value;
-            self.element.transform.baseVal.getItem(1).setTranslate(value, self._transform.positionY);
-        },
-        positionY(self, value) {
-            self._transform.positionY = value;
-            self.element.transform.baseVal.getItem(1).setTranslate(self._transform.positionX, value);
-        },
-        anchorX(self, value) {
-            self._transform.anchorX = value;
-            self._transform._anchorX = -(value * self.element.getBBox().width * self._transform.scaleX) + self._transform.pivotX;
-            self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorX, self._transform._anchorY);
-        },
-        anchorY(self, value) {
-            self._transform.anchorY = value;
-            self._transform._anchorY = -(value * self.element.getBBox().height * self._transform.scaleY) + self._transform.pivotY;
-            self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorX, self._transform._anchorY);
-        },
-        rotation(self, value) {
-            self._transform.rotation = value;
-            self.element.transform.baseVal.getItem(3).setRotate(value, self._transform.pivotX, self._transform.pivotY);
-        },
-        pivotX(self, value) {
-            self._transform.pivotX = value;
-            self.element.transform.baseVal.getItem(3).setRotate(self._transform.rotation, self._transform.pivotX, value);
-            this.updateAnchor(self)
-        },
-        pivotY(self, value) {
-            self._transform.pivotY = value;
-            self.element.transform.baseVal.getItem(3).setRotate(self._transform.rotation, value, self._transform.pivotY);
-            this.updateAnchor(self)
-        },
-        skewX(self, value) {
-            self._transform.skewX = value;
-            self.element.transform.baseVal.getItem(4).setSkewX(value);
-        },
-        skewY(self, value) {
-            self._transform.skewY = value;
-            self.element.transform.baseVal.getItem(5).setSkewY(value);
-        },
-        scaleX(self, value) {
-            self._transform.scaleX = value;
-            self.element.transform.baseVal.getItem(6).setScale(value, self._transform.scaleY);
-            this.updateAnchor(self);
-        },
-        scaleY(self, value) {
-            self._transform.scaleY = value;
-            self.element.transform.baseVal.getItem(6).setScale(self._transform.scaleX, value);
-            this.updateAnchor(self);
-        },
-        updateAnchor(self) {
-            self.transform.anchorX = self.transform.anchorX;
-            self.transform.anchorY = self.transform.anchorY;
-        }
     };
     return {
         //Renderer:
         createSVGRenderer: getSVGCanvas,
         //Shapes:
-        path: (p, att) => { return new Path(p, att) },
-        circle: (r, att) => { return new Circle(r, att) },
-        ellipse: (rx, ry, att) => { return new Ellipse(rx, ry, att) },
-        rectangle: (w, h, att) => { return new Rect(w, h, att) },
-        polygon: (p, att) => { return new Polygon(p, att) },
-        //Others:
-        image: (src, att) => { return new Image(src, att) },
-        symbol: (svg, att) => { return new Symbol(svg, att) },
-        clipPath: (id, mask, att) => { return new ClipPath(id, mask, att) },
-        group: (el, att) => { return new Group(el, att) },
-        //Lines:
-        line: (x1, y1, x2, y2, w, att) => { return new Line(x1, y1, x2, y2, w, att) },
-        polyline: (p, att) => { return new Polyline(p, att) },
-        //Text:
-        text: (str, att) => { return new Text(str, att) },
-        textPath: (srt, path, att) => { return new TextPath(srt, path, att) },
-        //Constructors
-        fromSymbol: (id, att) => { return new Use(id, att) },
+        shapes: {
+            path: (p, att) => { return new Path(p, att) },
+            circle: (r, att) => { return new Circle(r, att) },
+            ellipse: (rx, ry, att) => { return new Ellipse(rx, ry, att) },
+            rectangle: (w, h, att) => { return new Rect(w, h, att) },
+            polygon: (p, att) => { return new Polygon(p, att) },
+            //Others:
+            image: (src, att) => { return new Image(src, att) },
+            symbol: (svg, att) => { return new Symbol(svg, att) },
+            clipPath: (id, mask, att) => { return new ClipPath(id, mask, att) },
+            group: (el, att) => { return new Group(el, att) },
+            //Lines:
+            line: (x1, y1, x2, y2, w, att) => { return new Line(x1, y1, x2, y2, w, att) },
+            polyline: (p, att) => { return new Polyline(p, att) },
+            //Text:
+            text: (str, att) => { return new Text(str, att) },
+            textPath: (srt, path, att) => { return new TextPath(srt, path, att) },
+            //Constructors
+            fromSymbol: (id, att) => { return new Use(id, att) }
+        }
     };
 })();
