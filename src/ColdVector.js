@@ -1,4 +1,4 @@
-const ColdSVG = (function () {
+const ColdVector = (function () {
     let ids = 0;
     const ns = 'http://www.w3.org/2000/svg';
     class SVGCanvas {
@@ -7,7 +7,7 @@ const ColdSVG = (function () {
             this.element = document.createElementNS(ns, 'svg');
             this.definitions = document.createElementNS(ns, 'defs');
             this.element.appendChild(this.definitions);
-            this.resize(x, y)
+            this.resize(x, y);
         };
         setParent(node) {
             node.appendChild(this.element);
@@ -43,6 +43,7 @@ const ColdSVG = (function () {
         inElementNode(element, x, y) {
             let ctx = new SVGCanvas(x, y);
             element.appendChild(ctx.element);
+            return ctx;
         },
         inElementId(id, x, y) {
             let ctx = new SVGCanvas(x, y);
@@ -93,138 +94,182 @@ const ColdSVG = (function () {
             this.element.removeChild(svgE.element);
             return this;
         };
-        setClipPath(svgE) {
-            this.element.setAttributeNS(null, 'clip-path', svgE.url);
+        setClipPath(url) {
+            this.element.setAttributeNS(null, 'clip-path', 'url(#' + (typeof url === 'string' ? url : url.element.id) + ')');
+            return this;
+        };
+        changeToDefinition(svgE, id) {
+            this.element.id = id || ids++
+            svgE.definitions.appendChild(this.element);
+            return this;
         };
     };
     class Group extends MatrixBase {
-        constructor() {
-            super('g');
+        constructor(svgs, att = {}) {
+            super('g', att);
+            if (svgs) {
+                if (Array.isArray(svgs)) {
+                    svgs.map(item => this.element.appendChild(item.element || item));
+                } else {
+                    this.element.appendChild(svgs);
+                };
+            };
         };
     };
     class TextPath extends MatrixBase {
-        constructor(str, path) {
-            super('text');
+        constructor(str, path, att = {}) {
+            super('text', att);
             this.textPath = document.createElementNS(ns, 'textPath');
-            this.element.appendChild(this.textPath);
-            this.textPath.setAttributeNS(null, 'href', '#' + path);
             this.textPath.textContent = str;
+            this.element.appendChild(this.textPath);
+            if (typeof path === 'string') {
+                this.textPath.setAttributeNS(null, 'href', '#' + path);
+            } else {
+                this.textPath.setAttributeNS(null, 'href', '#' + path.element.id);
+            }
         };
     };
     class Text extends MatrixBase {
-        constructor(str) {
-            super('text');
+        constructor(str, att = {}) {
+            super('text', att);
             this.element.textContent = str;
         };
     };
+    class Use extends MatrixBase {
+        constructor(url, att = {}) {
+            super('use', att)
+            this.element.setAttributeNS(null, 'href', '#' + (typeof url === 'string' ? url : url.element.id));
+        }
+    }
     class Symbol extends MatrixBase {
-        constructor(id, first) {
-            super('symbol');
-            this.element.setAttributeNS(null, 'id', id);
-            this.url = `#${symbol.getAttributeNS(null, 'id')}`;
-            this.element.appendChild(this.shape);
+        constructor(first, att = {}) {
+            super('symbol', att);
             if (first) {
-                this.element.appendChild(first.element || first);
+                if (Array.isArray(first)) {
+                    first.map(item => this.element.appendChild(item.element || item));
+                } else {
+                    this.element.appendChild(first.element || first);
+                };
             };
         };
         addElement(svgB) {
             this.element.appendChild(svgB.element || svgB);
+            return this
+        };
+        addElements(svgS) {
+            svgS.map(item => this.element.appendChild(item.element || item));
+            return this;
         };
         removeElement(svgB) {
             this.element.removeChild(svgB.element || svgB);
+            return this;
         };
-        setParent(svgC) {
+        changeToDefinition(svgC, id) {
+            this.element.id = id;
             svgC.definitions.appendChild(this.element);
             return this;
         };
         use() {
             let result = document.createElementNS(ns, 'use');
-            result.setAttributeNS(null, 'href', this.url);
-            return result;
+            return new Use(this.element.id);
         };
     };
     class Polyline extends MatrixBase {
-        constructor(points = "20,100 40,60 70,80 100,20") {
-            super('polyline', {
+        constructor(points = "20,100 40,60 70,80 100,20", att) {
+            super('polyline', Object.assign({
                 'points': points,
-            });
+            }, att));
         };
     };
-    class Poligon extends MatrixBase {
-        constructor(points = '0,0 10,10 0,10') {
-            super('poligon', {
+    class Polygon extends MatrixBase {
+        constructor(points = '0,0 10,10 0,10',att={}) {
+            super('polygon', Object.assign({
                 'points': points
-            });
+            }, att));
         };
     };
     class Image extends MatrixBase {
-        constructor(src) {
-            super('image', {
+        constructor(src, att = {}) {
+            super('image', Object.assign({
                 'href': src
-            });
+            }, att));
         };
     };
-    class Elipse extends MatrixBase {
-        constructor(radiusX = 10, radiusY = 5) {
-            super('ellipse', {
+    class Ellipse extends MatrixBase {
+        constructor(radiusX = 10, radiusY = 5, att = {}) {
+            super('ellipse', Object.assign({
                 'rx': radiusX,
                 'ry': radiusY
-            });
+            }, att));
         };
     };
     class Circle extends MatrixBase {
-        constructor(radius = 10) {
-            super('circle', {
+        constructor(radius = 10, att = {}) {
+            super('circle', Object.assign({
                 'r': radius
-            });
+            }, att));
         };
     };
     class Path extends MatrixBase {
-        constructor(points = 'M 100 100 L 300 100 L 200 300 z') {
-            super('path', {
+        constructor(points = 'M 100 100 L 300 100 L 200 300 z', att = {}) {
+            super('path', Object.assign({
                 'd': points
-            });
+            }, att));
         };
     };
     class Line extends MatrixBase {
-        constructor(x1 = 0, y1 = 0, x2 = 10, y2 = 0, w = 1) {
-            super('line', {
+        constructor(x1 = 0, y1 = 0, x2 = 10, y2 = 0, w = 1, att = {}) {
+            super('line', Object.assign({
                 'x1': x1,
                 'x2': x2,
                 'y1': y1,
                 'y2': y2,
                 'stroke-width': w,
                 'stroke': 'black'
-            });
+            }, att));
         };
     };
     class Rect extends MatrixBase {
-        constructor(w, h) {
-            super('rect', {
+        constructor(w, h, att = {}) {
+            super('rect', Object.assign({
                 'width': w,
                 'height': h
-            });
+            }, att));
         };
     };
     class ClipPath extends MatrixBase {
-        constructor(id = ids++, mask) {
-            super('clipPath', {
-                'id': id
-            });
-            this.url = `url(#${this.element.getAttributeNS(null, 'id')})`;
+        constructor(mask, att = {}) {
+            super('clipPath', att);
             if (mask) {
-                this.element.appendChild(mask.element);
+                if (Array.isArray(mask)) {
+                    mask.map(item => this.element.appendChild(item.element || item));
+                } else {
+                    this.element.appendChild(mask.element);
+                };
+            };
+        };
+        clipElement(svg) {
+            if (this.element.id) {
+                (svg.element || svg).setAttributeNS(null, 'clip-path', 'url(#' + this.element.id + ')');
+                return this;
+            } else {
+                console.error('The element ' + this + ' has no an id, please use changeToDefinition first');
+                return false;
             };
         };
         addClipElement(svgB) {
             this.element.appendChild(svgB.shape || svgB);
             return this;
         };
+        addClipElements(svgs) {
+            svgs.map(item => this.element.appendChild(item.element || item));
+        };
         removeClipElement(svgB) {
             this.element.removeChild(svgB.shape || svgB);
             return this;
         };
-        setParent(svgC) {
+        changeToDefinition(svgC, id) {
+            this.element.id = id;
             svgC.definitions.appendChild(this.element);
             return this;
         };
@@ -245,12 +290,12 @@ const ColdSVG = (function () {
         },
         anchorX(self, value) {
             self._transform.anchorX = value;
-            self._transform._anchorX = -(value * self.element.getBBox().width * self._transform.scaleX);
+            self._transform._anchorX = -(value * self.element.getBBox().width * self._transform.scaleX) + self._transform.pivotX;
             self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorX, self._transform._anchorY);
         },
         anchorY(self, value) {
             self._transform.anchorY = value;
-            self._transform._anchorY = -(value * self.element.getBBox().height * self._transform.scaleY);
+            self._transform._anchorY = -(value * self.element.getBBox().height * self._transform.scaleY) + self._transform.pivotY;
             self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorX, self._transform._anchorY);
         },
         rotation(self, value) {
@@ -260,10 +305,12 @@ const ColdSVG = (function () {
         pivotX(self, value) {
             self._transform.pivotX = value;
             self.element.transform.baseVal.getItem(3).setRotate(self._transform.rotation, self._transform.pivotX, value);
+            this.updateAnchor(self)
         },
         pivotY(self, value) {
             self._transform.pivotY = value;
             self.element.transform.baseVal.getItem(3).setRotate(self._transform.rotation, value, self._transform.pivotY);
+            this.updateAnchor(self)
         },
         skewX(self, value) {
             self._transform.skewX = value;
@@ -288,33 +335,27 @@ const ColdSVG = (function () {
             self.transform.anchorY = self.transform.anchorY;
         }
     };
-    let giveRect = (w, h, c) => { return new Rect(w, h, c) };
-    let giveLine = (x1, y1, x2, y2, w, c) => { return new Line(x1, y1, x2, y2, w, c) };
-    let givePath = (p, c) => { return new Path(p, c) };
-    let giveCircle = (r, c) => { return new Circle(r, c) };
-    let giveClipPath = (id, mask) => { return new ClipPath(id, mask) };
-    let giveElipse = (rx, ry, c) => { return new Elipse(rx, ry, c) };
-    let giveImage = (src) => { return new Image(src) };
-    let givepoligon = (p, c) => { return new Poligon(p, c) };
-    let givePolyline = (p, c) => { return new Polyline(p, c) };
-    let giveSymbol = (id, svg) => { return new Symbol(id, svg) };
-    let giveContainer = (el) => { return new Container(el) };
-    let giveText = (str) => { return new Text(str) };
-    let giveTextPath = (srt, path) => { return new TextPath(srt, path) };
     return {
+        //Renderer:
         createSVGRenderer: getSVGCanvas,
-        rectangle: giveRect,
-        line: giveLine,
-        path: givePath,
-        circle: giveCircle,
-        clipPath: giveClipPath,
-        elipse: giveElipse,
-        image: giveImage,
-        poligon: givepoligon,
-        polyline: givePolyline,
-        symbol: giveSymbol,
-        container: giveContainer,
-        text: giveText,
-        textPath: giveTextPath,
+        //Shapes:
+        path: (p, att) => { return new Path(p, att) },
+        circle: (r, att) => { return new Circle(r, att) },
+        ellipse: (rx, ry, att) => { return new Ellipse(rx, ry, att) },
+        rectangle: (w, h, att) => { return new Rect(w, h, att) },
+        polygon: (p, att) => { return new Polygon(p, att) },
+        //Others:
+        image: (src, att) => { return new Image(src, att) },
+        symbol: (svg, att) => { return new Symbol(svg, att) },
+        clipPath: (id, mask, att) => { return new ClipPath(id, mask, att) },
+        group: (el, att) => { return new Group(el, att) },
+        //Lines:
+        line: (x1, y1, x2, y2, w, att) => { return new Line(x1, y1, x2, y2, w, att) },
+        polyline: (p, att) => { return new Polyline(p, att) },
+        //Text:
+        text: (str, att) => { return new Text(str, att) },
+        textPath: (srt, path, att) => { return new TextPath(srt, path, att) },
+        //Constructors
+        fromSymbol: (id, att) => { return new Use(id, att) },
     };
 })();
