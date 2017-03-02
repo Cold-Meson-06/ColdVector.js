@@ -20,9 +20,8 @@ const ColdVector = (function () {
         return result;
     };
 
-    const validTransforms = ['positionx', 'positiony', 'anchorx', 'anchory', 'pivotx', 'pivoty', 'rotation', 'skewx', 'skewy', 'scalex', 'scaley'];
     const ns = 'http://www.w3.org/2000/svg';
-    
+
     class SVGCanvas {
         constructor(x, y) {
             const self = this;
@@ -192,20 +191,17 @@ const ColdVector = (function () {
                 positiony: 0,
                 anchorx: 0,
                 anchory: 0,
-                pivotx: 0,
-                pivoty: 0,
                 rotation: 0,
                 skewx: 0,
                 skewy: 0,
                 scalex: 1,
                 scaley: 1,
                 _anchorx: 0,
-                _anchory: 0
+                _anchory: 0,
+                _pivotx:0,
+                _pivoty:0
             };
-            this.transform = new Proxy(this._transform, {
-                get: (t, name) => { return self._transform[name] },
-                set: (t, name, value) => { if (isEqualToAny(name, validTransforms)) { return transforms[name](self, value) } else { return self._transform[name] = value } }
-            });
+
             this.rotation = 0;
             this.position = {
                 x: 0, y: 0,
@@ -217,14 +213,7 @@ const ColdVector = (function () {
             this.anchor = {
                 x: 0, y: 0,
                 set(x, y) {
-                    this.x = x, this.y = y
-                    return self
-                }
-            };
-            this.pivot = {
-                x: 0, y: 0,
-                set(x, y) {
-                    this.x = x, this.y = y
+                    self.anchor.x = x, self.anchor.y = y
                     return self
                 }
             };
@@ -238,62 +227,96 @@ const ColdVector = (function () {
             this.scale = {
                 x: 0, y: 0,
                 set(x, y) {
-                    this.x = x, this.y = y
+                    self.scale.x = x, self.scale.y = y
                     return self
                 }
             };
             Object.defineProperty(this, 'rotation', {
-                get() { return self.transform.rotation },
-                set(x) { return self.transform.rotation = x }
+                get() { return self._transform.rotation },
+                set(value) {
+                    self._transform.rotation = value;
+                    self.element.transform.baseVal.getItem(3).setRotate(value, self._transform._pivotx, self._transform._pivoty);
+                    return value;
+                }
             });
             Object.defineProperties(self.position, {
                 'x': {
-                    get() { return self.transform.positionx },
-                    set(v) { return self.transform.positionx = v }
+                    get() { return self._transform.positionx },
+                    set(value) {
+                        self._transform.positionx = value;
+                        self.element.transform.baseVal.getItem(1).setTranslate(value, self._transform.positiony);
+                        return value;
+                    }
                 },
                 'y': {
-                    get() { return self.transform.positiony },
-                    set(v) { return self.transform.positiony = v }
+                    get() { return self._transform.positiony },
+                    set(value) {
+                        self._transform.positiony = value;
+                        self.element.transform.baseVal.getItem(1).setTranslate(self._transform.positionx, value);
+                        return value;
+                    }
                 }
             });
             Object.defineProperties(self.anchor, {
                 'x': {
-                    get() { return self.transform.anchorx },
-                    set(v) { return self.transform.anchorx = v }
+                    get() { return self._transform.anchorx },
+                    set(value) {
+                        self._transform.anchorx = value;
+                        self._transform._anchorx = -(value * self.element.getBBox().width * self._transform.scalex);
+                        self._transform._pivotx =  -self._transform._anchorx
+                        self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorx, self._transform._anchory);
+                        self.updateRotation()
+                        return value;
+                    }
                 },
                 'y': {
-                    get() { return self.transform.anchory },
-                    set(v) { return self.transform.anchory = v }
-                }
-            });
-            Object.defineProperties(self.pivot, {
-                'x': {
-                    get() { return self.transform.pivotx },
-                    set(v) { return self.transform.pivotx = v }
-                },
-                'y': {
-                    get() { return self.transform.pivoty },
-                    set(v) { return self.transform.pivoty = v }
+                    get() { return self._transform.anchory },
+                    set(value) {
+                        self._transform.anchory = value;
+                        self._transform._anchory = -(value * self.element.getBBox().height * self._transform.scaley);
+                        self._transform._pivoty = -self._transform._anchory
+                        self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorx, self._transform._anchory);
+                        self.updateRotation()
+                        return value;
+                    }
                 }
             });
             Object.defineProperties(self.skew, {
                 'x': {
-                    get() { return self.transform.skewx },
-                    set(v) { return self.transform.skewx = v }
+                    get() { return self._transform.skewx },
+                    set(value) {
+                        self._transform.skewx = value;
+                        self.element.transform.baseVal.getItem(4).setSkewX(value);
+                        return value;
+                    }
                 },
                 'y': {
-                    get() { return self.transform.skewy },
-                    set(v) { return self.transform.skewy = v }
+                    get() { return self._transform.skewy },
+                    set(value) {
+                        self._transform.skewy = value;
+                        self.element.transform.baseVal.getItem(5).setSkewY(value);
+                        return value;
+                    }
                 }
             });
             Object.defineProperties(self.scale, {
                 'x': {
-                    get() { return self.transform.scalex },
-                    set(v) { return self.transform.scalex = v }
+                    get() { return self._transform.scalex },
+                    set(value) {
+                        self._transform.scalex = value;
+                        self.element.transform.baseVal.getItem(6).setScale(value, self._transform.scaley);
+                        self.updateAnchor();
+                        return value;
+                    }
                 },
                 'y': {
-                    get() { return self.transform.scaley },
-                    set(v) { return self.transform.scaley = v }
+                    get() { return self._transform.scaley },
+                    set(value) {
+                        self._transform.scaley = value;
+                        self.element.transform.baseVal.getItem(6).setScale(self._transform.scalex, value);
+                        self.updateAnchor();
+                        return value;
+                    }
                 }
             })
         };
@@ -305,72 +328,12 @@ const ColdVector = (function () {
             this.rotation = v * (180 / Math.PI);
             return this;
         };
-    };
-    const transforms = {
-        positionx(self, value) {
-            self._transform.positionx = value;
-            self.element.transform.baseVal.getItem(1).setTranslate(value, self._transform.positiony);
-            return value;
-        },
-        positiony(self, value) {
-            self._transform.positiony = value;
-            self.element.transform.baseVal.getItem(1).setTranslate(self._transform.positionx, value);
-            return value;
-        },
-        anchorx(self, value) {
-            self._transform.anchorx = value;
-            self._transform._anchorx = -(value * self.element.getBBox().width * self._transform.scalex) + self._transform.pivotx;
-            self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorx, self._transform._anchory);
-            return value;
-        },
-        anchory(self, value) {
-            self._transform.anchory = value;
-            self._transform._anchory = -(value * self.element.getBBox().height * self._transform.scaley) + self._transform.pivoty;
-            self.element.transform.baseVal.getItem(2).setTranslate(self._transform._anchorx, self._transform._anchory);
-            return value;
-        },
-        rotation(self, value) {
-            self._transform.rotation = value;
-            self.element.transform.baseVal.getItem(3).setRotate(value, self._transform.pivotx, self._transform.pivoty);
-            return value;
-        },
-        pivotx(self, value) {
-            self._transform.pivotx = value;
-            self.element.transform.baseVal.getItem(3).setRotate(self._transform.rotation, self._transform.pivotX, value);
-            this.updateAnchor(self);
-            return value;
-        },
-        pivoty(self, value) {
-            self._transform.pivoty = value;
-            self.element.transform.baseVal.getItem(3).setRotate(self._transform.rotation, value, self._transform.pivoty);
-            this.updateAnchor(self);
-            return value;
-        },
-        skewx(self, value) {
-            self._transform.skewx = value;
-            self.element.transform.baseVal.getItem(4).setSkewX(value);
-            return value;
-        },
-        skewy(self, value) {
-            self._transform.skewy = value;
-            self.element.transform.baseVal.getItem(5).setSkewY(value);
-            return value;
-        },
-        scalex(self, value) {
-            self._transform.scalex = value;
-            self.element.transform.baseVal.getItem(6).setScale(value, self._transform.scaley);
-            this.updateAnchor(self);
-            return value;
-        },
-        scaley(self, value) {
-            self._transform.scaley = value;
-            self.element.transform.baseVal.getItem(6).setScale(self._transform.scalex, value);
-            this.updateAnchor(self);
-            return value;
-        },
-        updateAnchor(self) {
-            self.transform.anchorx = self.transform.anchorx;
-            self.transform.anchory = self.transform.anchory;
+        updateAnchor() {
+            this.anchor.x=this.anchor.x
+            this.anchor.y=this.anchor.y
+        };
+        updateRotation(){
+            this.rotation = this.rotation
         }
     };
     class Group extends MatrixBase {
@@ -515,8 +478,12 @@ const ColdVector = (function () {
     class Image extends MatrixBase {
         constructor(src, att = {}) {
             super('image', Object.assign({
-                'href': src
+                'href': src,
+                'externalResourcesRequired':'true'
             }, att));
+            this.element.onload  = a => {
+                this.updateAnchor()
+            }
         };
     };
     class Ellipse extends MatrixBase {

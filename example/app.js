@@ -32,7 +32,7 @@ let polygon = svg.polygon("60,20 100,40 100,80 60,100 20,80 20,40",{'stroke':'#0
 let image = svg.image("https://mdn.mozillademos.org/files/6457/mdn_logo_only_color.png")
     .position.set(500,100)
     .scale.set(0.2,0.2)
-    .rotation = 45
+    .setRotation(45) 
 
 
 //Symbool
